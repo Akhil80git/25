@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phone Mirror — QR se Connect Karo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0f1117; color: #e8eaf0; min-height: 100vh; }
+
+  .app { display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; min-height: 100vh; }
+
+  h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.4rem; color: #fff; text-align: center; }
+  .sub { color: #9aa0b0; font-size: 0.9rem; margin-bottom: 2rem; text-align: center; }
+
+  /* MODE DETECT */
+  #pc-view, #mobile-view { width: 100%; max-width: 700px; }
+
+  /* PC VIEW */
+  .pc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+  @media(max-width:600px){ .pc-grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #1a1d27;
+    border: 1px solid #2a2e3e;
+    border-radius: 14px;
+    padding: 1.5rem;
+    text-align: center;
+  }
+  .card h2 { font-size: 1rem; font-weight: 500; color: #bbc0d0; margin-bottom: 1rem; }
+
+  #qrcode-box { display: flex; justify-content: center; align-items: center; min-height: 180px; }
+  #qrcode-box canvas, #qrcode-box img { border-radius: 8px; }
+
+  .status-badge {
+    display: inline-block;
+    padding: 0.3rem 0.9rem;
+    border-radius: 20px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    margin-top: 0.8rem;
+  }
+  .badge-wait { background: #2a2040; color: #a080ff; }
+  .badge-connected { background: #0f2a1a; color: #40e080; }
+  .badge-error { background: #2a1010; color: #ff6060; }
+
+  .room-id-display {
+    font-size: 0.75rem;
+    color: #556;
+    margin-top: 0.6rem;
+    word-break: break-all;
+  }
+
+  /* VIDEO */
+  #remote-video {
+    width: 100%;
+    border-radius: 10px;
+    background: #0a0c12;
+    min-height: 220px;
+    object-fit: contain;
+    display: block;
+  }
+  .video-wrap { position: relative; }
+  .video-placeholder {
+    width: 100%;
+    min-height: 220px;
+    border-radius: 10px;
+    background: #0a0c12;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #444;
+    font-size: 0.85rem;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .video-placeholder .icon { font-size: 2.5rem; }
+
+  /* MOBILE VIEW */
+  #mobile-view { max-width: 420px; }
+  .mob-card {
+    background: #1a1d27;
+    border: 1px solid #2a2e3e;
+    border-radius: 14px;
+    padding: 2rem 1.5rem;
+    text-align: center;
+  }
+  .mob-card h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; color: #fff; }
+  .mob-card p { color: #9aa0b0; font-size: 0.88rem; margin-bottom: 1.5rem; }
+
+  #local-video {
+    width: 100%;
+    border-radius: 10px;
+    background: #0a0c12;
+    max-height: 260px;
+    object-fit: cover;
+    display: block;
+    margin-bottom: 1rem;
+    transform: scaleX(-1);
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 0.7rem 1.8rem;
+    border-radius: 9px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: #5b6af0; color: #fff; }
+  .btn-danger { background: #d03050; color: #fff; margin-top: 0.7rem; }
+  .btn-disabled { background: #2a2e3e; color: #556; cursor: not-allowed; }
+
+  .mob-status { margin-top: 1rem; font-size: 0.85rem; color: #9aa0b0; }
+  .green { color: #40e080; }
+  .red { color: #ff6060; }
+
+  #instruction-steps {
+    background: #1a1d27;
+    border: 1px solid #2a2e3e;
+    border-radius: 14px;
+    padding: 1.2rem 1.5rem;
+    margin-top: 1.5rem;
+    width: 100%;
+    max-width: 700px;
+  }
+  #instruction-steps h3 { font-size: 0.95rem; color: #bbc0d0; margin-bottom: 0.8rem; }
+  #instruction-steps ol { padding-left: 1.3rem; }
+  #instruction-steps li { color: #9aa0b0; font-size: 0.85rem; margin-bottom: 0.4rem; }
+  #instruction-steps li strong { color: #c8ccdc; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>📱 Phone → PC Mirror</h1>
+  <p class="sub">QR scan karo aur mobile screen PC par dekho</p>
+
+  <!-- PC VIEW -->
+  <div id="pc-view" style="display:none">
+    <div class="pc-grid">
+      <div class="card">
+        <h2>📲 Mobile se scan karo</h2>
+        <div id="qrcode-box"><div style="color:#444;font-size:0.85rem">QR generate ho raha hai...</div></div>
+        <div id="status-badge" class="status-badge badge-wait">⏳ Mobile ka intezaar...</div>
+        <div id="room-display" class="room-id-display"></div>
+      </div>
+      <div class="card">
+        <h2>🖥 Mobile ka Screen</h2>
+        <div class="video-wrap">
+          <div id="video-placeholder" class="video-placeholder">
+            <span class="icon">📵</span>
+            <span>Mobile connect hone ke baad<br>yahan screen dikhegi</span>
+          </div>
+          <video id="remote-video" autoplay playsinline style="display:none"></video>
+        </div>
+      </div>
+    </div>
+
+    <div id="instruction-steps">
+      <h3>Kaise use karein:</h3>
+      <ol>
+        <li><strong>Is page ko PC par khula rakho</strong> — QR code dikh raha hoga</li>
+        <li><strong>Mobile par camera app ya QR scanner</strong> kholo</li>
+        <li>QR scan karo — mobile browser mein ek link khulega</li>
+        <li>Mobile par <strong>"Camera Share Karo"</strong> button dabao</li>
+        <li>PC par live camera feed dikhne lagegi! 🎉</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- MOBILE VIEW -->
+  <div id="mobile-view" style="display:none">
+    <div class="mob-card">
+      <h2>📱 Mobile Connected</h2>
+      <p>Camera share karo — PC par live dikhega</p>
+      <video id="local-video" autoplay muted playsinline style="display:none"></video>
+      <div>
+        <button class="btn btn-primary" id="start-btn" onclick="startCamera()">📷 Camera Share Karo</button>
+        <br>
+        <button class="btn btn-danger" id="stop-btn" onclick="stopCamera()" style="display:none">🛑 Band Karo</button>
+      </div>
+      <div class="mob-status" id="mob-status">PC se connect ho raha hai...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const roomParam = urlParams.get('room');
+const isMobile = roomParam !== null;
+
+// ---- UTILITY ----
+function genRoomId() {
+  return 'room-' + Math.random().toString(36).substr(2, 9);
+}
+
+// ===========================
+//  PC SIDE
+// ===========================
+if (!isMobile) {
+  document.getElementById('pc-view').style.display = 'block';
+  const roomId = genRoomId();
+  const mobileURL = window.location.href.split('?')[0] + '?room=' + roomId;
+
+  // Show room
+  document.getElementById('room-display').textContent = 'Room: ' + roomId;
+
+  // Generate QR
+  setTimeout(() => {
+    document.getElementById('qrcode-box').innerHTML = '';
+    new QRCode(document.getElementById('qrcode-box'), {
+      text: mobileURL,
+      width: 180,
+      height: 180,
+      colorDark: '#ffffff',
+      colorLight: '#1a1d27',
+      correctLevel: QRCode.CorrectLevel.H
+    });
+  }, 300);
+
+  // PeerJS — PC listens as host
+  const peer = new Peer('pc-' + roomId, {
+    debug: 0,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    }
+  });
+
+  peer.on('open', id => {
+    console.log('PC peer ID:', id);
+  });
+
+  peer.on('call', call => {
+    // Answer with no local stream (PC just watches)
+    call.answer();
+
+    const badge = document.getElementById('status-badge');
+    badge.textContent = '✅ Mobile Connected!';
+    badge.className = 'status-badge badge-connected';
+
+    call.on('stream', remoteStream => {
+      const vid = document.getElementById('remote-video');
+      const placeholder = document.getElementById('video-placeholder');
+      vid.srcObject = remoteStream;
+      vid.style.display = 'block';
+      placeholder.style.display = 'none';
+    });
+
+    call.on('close', () => {
+      badge.textContent = '❌ Mobile disconnect ho gaya';
+      badge.className = 'status-badge badge-error';
+      document.getElementById('remote-video').style.display = 'none';
+      document.getElementById('video-placeholder').style.display = 'flex';
+    });
+  });
+
+  peer.on('error', err => {
+    const badge = document.getElementById('status-badge');
+    badge.textContent = '⚠️ Connection error';
+    badge.className = 'status-badge badge-error';
+    console.error(err);
+  });
+}
+
+// ===========================
+//  MOBILE SIDE
+// ===========================
+if (isMobile) {
+  document.getElementById('mobile-view').style.display = 'block';
+
+  const mobileId = 'mob-' + roomParam + '-' + Math.random().toString(36).substr(2,5);
+  const peer = new Peer(mobileId, {
+    debug: 0,
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    }
+  });
+
+  let currentStream = null;
+  let currentCall = null;
+
+  peer.on('open', id => {
+    document.getElementById('mob-status').innerHTML = '<span class="green">✅ Ready hai — Camera share karo</span>';
+  });
+
+  peer.on('error', err => {
+    document.getElementById('mob-status').innerHTML = '<span class="red">❌ Error: ' + err.message + '</span>';
+  });
+
+  window.startCamera = async function() {
+    try {
+      document.getElementById('mob-status').textContent = '🎥 Camera access le raha hai...';
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+
+      currentStream = stream;
+      const vid = document.getElementById('local-video');
+      vid.srcObject = stream;
+      vid.style.display = 'block';
+
+      // Call PC
+      const pcId = 'pc-' + roomParam;
+      const call = peer.call(pcId, stream);
+      currentCall = call;
+
+      document.getElementById('start-btn').style.display = 'none';
+      document.getElementById('stop-btn').style.display = 'inline-block';
+      document.getElementById('mob-status').innerHTML = '<span class="green">📡 PC par live stream chal rahi hai!</span>';
+
+      call.on('close', () => {
+        document.getElementById('mob-status').innerHTML = '<span class="red">Connection band ho gayi</span>';
+        document.getElementById('start-btn').style.display = 'inline-block';
+        document.getElementById('stop-btn').style.display = 'none';
+      });
+
+      call.on('error', err => {
+        document.getElementById('mob-status').innerHTML = '<span class="red">Call error: ' + err.message + '</span>';
+      });
+
+    } catch(err) {
+      document.getElementById('mob-status').innerHTML = '<span class="red">❌ Camera access nahi mila: ' + err.message + '</span>';
+    }
+  };
+
+  window.stopCamera = function() {
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+      currentStream = null;
+    }
+    if (currentCall) {
+      currentCall.close();
+      currentCall = null;
+    }
+    const vid = document.getElementById('local-video');
+    vid.srcObject = null;
+    vid.style.display = 'none';
+    document.getElementById('start-btn').style.display = 'inline-block';
+    document.getElementById('stop-btn').style.display = 'none';
+    document.getElementById('mob-status').innerHTML = '<span>Camera band kar diya</span>';
+  };
+}
+</script>
+</body>
+</html>
